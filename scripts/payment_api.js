@@ -4,14 +4,27 @@
  *
  * 用法：
  *   node payment_api.js --amount 50 [--order_type tip] [--payee "主播小明"] [--description "打赏主播小明50元"]
+ *   node payment_api.js --query_reqno SEQ2033387515024719873
  *
  * 输出（成功）：
  *   SUCCESS
- *   tradeCode=62254562871846512
- *   tradeLink=https://pay-h5.4199191.xyz/pyment/62254562871846512
+ *   reqNo=SEQ2033387515024719873
+ *   tradeCode=6662033387515024719872
+ *   tradeLink=https://pay-h5.4199191.xyz/payment?reqNo=SEQ2033387515024719873
  *
  * 输出（失败）：
  *   FAIL
+ *   message=错误原因描述
+ *
+ * 输出（查询已支付）：
+ *   QUERY_PAID
+ *   paymentTime=2026-03-16 11:44:28
+ *
+ * 输出（查询未支付）：
+ *   QUERY_UNPAID
+ *
+ * 输出（查询失败）：
+ *   QUERY_FAIL
  *   message=错误原因描述
  */
 
@@ -19,6 +32,7 @@ const https = require('https');
 const http = require('http');
 
 const API_URL = 'https://pay.4199191.xyz/code';
+const QUERY_URL = 'https://pay.4199191.xyz/payment/query';
 const TIMEOUT_MS = 30000;
 
 function parseArgs() {
@@ -40,68 +54,135 @@ function fail(message) {
   process.exit(1);
 }
 
-function success(tradeCode, tradeLink) {
+function queryFail(message) {
+  process.stdout.write('QUERY_FAIL\n');
+  process.stdout.write(`message=${message}\n`);
+  process.exit(1);
+}
+
+function success(reqNo, tradeCode, tradeLink) {
   process.stdout.write('SUCCESS\n');
+  process.stdout.write(`reqNo=${reqNo}\n`);
   process.stdout.write(`tradeCode=${tradeCode}\n`);
   process.stdout.write(`tradeLink=${tradeLink}\n`);
   process.exit(0);
 }
 
-const args = parseArgs();
-const payload = {};
-if (args.amount !== undefined) payload.amount = parseFloat(args.amount);
-if (args.order_type !== undefined) payload.order_type = args.order_type;
-if (args.payee !== undefined) payload.payee = args.payee;
-if (args.description !== undefined) payload.description = args.description;
+function doQuery(reqNo) {
+  const url = new URL(QUERY_URL + '?reqNo=' + encodeURIComponent(reqNo));
+  const lib = url.protocol === 'https:' ? https : http;
 
-const body = JSON.stringify(payload);
-const url = new URL(API_URL);
-const lib = url.protocol === 'https:' ? https : http;
+  const options = {
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname + url.search,
+    method: 'GET',
+  };
 
-const options = {
-  hostname: url.hostname,
-  port: url.port || (url.protocol === 'https:' ? 443 : 80),
-  path: url.pathname,
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(body),
-  },
-};
+  const req = lib.request(options, (res) => {
+    let raw = '';
+    res.setEncoding('utf8');
+    res.on('data', (chunk) => { raw += chunk; });
+    res.on('end', () => {
+      let result;
+      try {
+        result = JSON.parse(raw);
+      } catch (e) {
+        queryFail('响应解析失败，请稍后重试');
+        return;
+      }
+      if (result.resultCode === 1) {
+        const data = result.data || {};
+        if (data.paid) {
+          process.stdout.write('QUERY_PAID\n');
+          process.stdout.write(`paymentTime=${data.paymentTime || ''}\n`);
+          process.exit(0);
+        } else {
+          process.stdout.write('QUERY_UNPAID\n');
+          process.exit(0);
+        }
+      } else {
+        queryFail(result.message || '未知错误');
+      }
+    });
+  });
 
-const req = lib.request(options, (res) => {
-  let raw = '';
-  res.setEncoding('utf8');
-  res.on('data', (chunk) => { raw += chunk; });
-  res.on('end', () => {
-    let result;
-    try {
-      result = JSON.parse(raw);
-    } catch (e) {
-      fail('响应解析失败，请稍后重试');
-      return;
-    }
-    if (result.resultCode === 1) {
-      const data = result.data || {};
-      success(data.tradeCode || '', data.tradeLink || '');
+  req.setTimeout(TIMEOUT_MS, () => {
+    req.destroy();
+    queryFail('请求超时，请稍后重试');
+  });
+
+  req.on('error', (e) => {
+    if (e.code === 'ECONNREFUSED' || e.code === 'ENOTFOUND') {
+      queryFail('网络连接失败，请检查网络后重试');
     } else {
-      fail(result.message || '未知错误');
+      queryFail('查询服务暂时不可用，请稍后重试');
     }
   });
-});
 
-req.setTimeout(TIMEOUT_MS, () => {
-  req.destroy();
-  fail('请求超时，请稍后重试');
-});
+  req.end();
+}
 
-req.on('error', (e) => {
-  if (e.code === 'ECONNREFUSED' || e.code === 'ENOTFOUND') {
-    fail('网络连接失败，请检查网络后重试');
-  } else {
-    fail('支付服务暂时不可用，请稍后重试');
-  }
-});
+const args = parseArgs();
 
-req.write(body);
-req.end();
+if (args.query_reqno !== undefined) {
+  doQuery(args.query_reqno);
+} else {
+  const payload = {};
+  if (args.amount !== undefined) payload.amount = parseFloat(args.amount);
+  if (args.order_type !== undefined) payload.order_type = args.order_type;
+  if (args.payee !== undefined) payload.payee = args.payee;
+  if (args.description !== undefined) payload.description = args.description;
+
+  const body = JSON.stringify(payload);
+  const url = new URL(API_URL);
+  const lib = url.protocol === 'https:' ? https : http;
+
+  const options = {
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    },
+  };
+
+  const req = lib.request(options, (res) => {
+    let raw = '';
+    res.setEncoding('utf8');
+    res.on('data', (chunk) => { raw += chunk; });
+    res.on('end', () => {
+      let result;
+      try {
+        result = JSON.parse(raw);
+      } catch (e) {
+        fail('响应解析失败，请稍后重试');
+        return;
+      }
+      if (result.resultCode === 1) {
+        const data = result.data || {};
+        success(data.reqNo || '', data.tradeCode || '', data.tradeLink || '');
+      } else {
+        fail(result.message || '未知错误');
+      }
+    });
+  });
+
+  req.setTimeout(TIMEOUT_MS, () => {
+    req.destroy();
+    fail('请求超时，请稍后重试');
+  });
+
+  req.on('error', (e) => {
+    if (e.code === 'ECONNREFUSED' || e.code === 'ENOTFOUND') {
+      fail('网络连接失败，请检查网络后重试');
+    } else {
+      fail('支付服务暂时不可用，请稍后重试');
+    }
+  });
+
+  req.write(body);
+  req.end();
+}
