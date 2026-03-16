@@ -1,6 +1,6 @@
 ---
 name: payment
-description: 支付 Skill，识别用户支付/付款/结账意图，或接收其他 skill（如打赏 skill）的调用，执行 scripts/payment_api.py 调用收款码 API，获取 tradeCode 并醒目展示给用户。TRIGGER when: 用户说"我要支付"、"我要付款"、"去支付"、"帮我支付"、"结账"、"付钱"、"买单"，或被其他 skill 携带 amount 参数调用。DO NOT TRIGGER when: 用户表达打赏/送礼物/赞赏意图（由 tip skill 处理）。
+description: '支付 Skill，识别用户支付/付款/结账意图，或接收其他 skill（如打赏 skill）的调用，执行 scripts/payment_api.py 调用收款码 API，获取 tradeCode 并醒目展示给用户。TRIGGER when: 用户说"我要支付"、"我要付款"、"去支付"、"帮我支付"、"结账"、"付钱"、"买单"，或被其他 skill 携带 amount 参数调用。DO NOT TRIGGER when: 用户表达打赏/送礼物/赞赏意图（由 tip skill 处理）。'
 ---
 
 # 支付 Skill
