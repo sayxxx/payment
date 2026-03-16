@@ -44,6 +44,7 @@ def do_query(req_no):
     url = QUERY_URL + "?" + urllib.parse.urlencode({"reqNo": req_no})
     try:
         req = urllib.request.Request(url, method="GET")
+        req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as e:
@@ -119,7 +120,10 @@ def main():
         req = urllib.request.Request(
             API_URL,
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
